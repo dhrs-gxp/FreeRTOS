@@ -6,16 +6,11 @@
 #include "led.h"
 #include "string.h"
 
-static TaskHandle_t AppTaskCreate_Handle;
-static TaskHandle_t LED_Task_Handle;
+static TaskHandle_t AppTaskCreate_Handle = NULL;
+static TaskHandle_t LED1_Task_Handle = NULL;
+static TaskHandle_t LED2_Task_Handle = NULL;
 
-static StackType_t AppTaskCreate_Stack[128];
-static StackType_t LED_Task_Stack[128];
-
-static StaticTask_t AppTaskCreate_TCB;
-static StaticTask_t LED_Task_TCB;
-
-static void LED_Task(void* parameter)
+static void LED1_Task(void* parameter)
 {
 	while(1)
 	{
@@ -24,21 +19,43 @@ static void LED_Task(void* parameter)
 	}
 }
 
+static void LED2_Task(void* parameter)
+{
+	while(1)
+	{
+		LED1 = ~LED1;
+		vTaskDelay(500);
+	}
+}
+
 static void AppTaskCreate(void)
 {
+	BaseType_t xReturn = pdPASS;
+	
 	taskENTER_CRITICAL();	//进入临界区
 	/*创建LED_Task任务*/
-	LED_Task_Handle = xTaskCreateStatic((TaskFunction_t)LED_Task,			//任务函数
-										(const char*)"LED_Task",			//任务名称
-										(uint32_t)128,						//任务堆栈大小
-										(void*)NULL,						//传递给任务函数的参数
-										(UBaseType_t)4,						//任务优先级
-										(StackType_t*)LED_Task_Stack,		//任务堆栈
-										(StaticTask_t*)&LED_Task_TCB);		//任务控制块
-	if(LED_Task_Handle != NULL) printf("LED_Task 任务创建成功!\r\n");
-	else if(LED_Task_Handle == NULL) printf("LED_Task 任务创建失败!\r\n");
+	xReturn = xTaskCreate((TaskFunction_t)LED1_Task,
+						  (const char*   )"LED1_Task",
+						  (uint16_t      )512,
+						  (void*		 )NULL,
+						  (UBaseType_t   )2,
+						  (TaskHandle_t* )&LED1_Task_Handle);
+										
+	if(xReturn == pdPASS) printf("LED1_Task 任务创建成功!\r\n");
+	else printf("LED1_Task 任务创建失败!\r\n");
+						  
+	xReturn = xTaskCreate((TaskFunction_t)LED2_Task,
+						  (const char*   )"LED2_Task",
+						  (uint16_t      )512,
+						  (void*		 )NULL,
+						  (UBaseType_t   )2,
+						  (TaskHandle_t* )&LED2_Task_Handle);
+										
+	if(xReturn == pdPASS) printf("LED2_Task 任务创建成功!\r\n");
+	else printf("LED2_Task 任务创建失败!\r\n");
 	
 	vTaskDelete(AppTaskCreate_Handle);
+						  
 	taskEXIT_CRITICAL();
 }
 
@@ -72,15 +89,17 @@ int main(void)
 	uart_init(115200);
 	LED_Init();
 	
-	AppTaskCreate_Handle = xTaskCreateStatic((TaskFunction_t)AppTaskCreate,		//任务函数
-										(const char*)"AppTaskCreate",			//任务名称
-										(uint32_t)128,							//任务堆栈大小
-										(void*)NULL,							//传递给任务函数的参数
-										(UBaseType_t)3,							//任务优先级
-										(StackType_t*)AppTaskCreate_Stack,		//任务堆栈
-										(StaticTask_t*)&AppTaskCreate_TCB);		//任务控制块
+	BaseType_t xReturn = pdPASS;
+	
+	xReturn = xTaskCreate((TaskFunction_t)AppTaskCreate,
+						  (const char*   )"AppTaskCreate",
+						  (uint16_t      )512,
+						  (void*		 )NULL,
+						  (UBaseType_t   )1,
+						  (TaskHandle_t* )&AppTaskCreate_Handle);
 										
-	if(AppTaskCreate_Handle != NULL) vTaskStartScheduler();
+	if(xReturn == pdPASS) vTaskStartScheduler();
+	else return -1;
 	
 	while (1);
   
