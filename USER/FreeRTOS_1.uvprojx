@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F40_41xxx,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\USER;..\CORE;..\FWLIB\inc;..\SYSTEM\delay;..\SYSTEM\sys;..\SYSTEM\usart;..\FreeRTOS\include;..\FreeRTOS\port\RVDS\ARM_CM4F;..\HARDWARE\LED</IncludePath>
+              <IncludePath>..\USER;..\CORE;..\FWLIB\inc;..\SYSTEM\delay;..\SYSTEM\sys;..\SYSTEM\usart;..\FreeRTOS\include;..\FreeRTOS\port\RVDS\ARM_CM4F;..\HARDWARE\LED;..\HARDWARE\KEY</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -658,6 +658,11 @@
               <FileName>led.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\HARDWARE\LED\led.c</FilePath>
+            </File>
+            <File>
+              <FileName>key.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\KEY\key.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -4,11 +4,14 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "led.h"
-#include "string.h"
+#include "key.h"
 
-static TaskHandle_t AppTaskCreate_Handle = NULL;
-static TaskHandle_t LED1_Task_Handle = NULL;
-static TaskHandle_t LED2_Task_Handle = NULL;
+eTaskState state;
+
+static TaskHandle_t AppTaskCreate_Handle;
+static TaskHandle_t LED1_Task_Handle;
+static TaskHandle_t LED2_Task_Handle;
+static TaskHandle_t Delete_Task_Handle;
 
 static void LED1_Task(void* parameter)
 {
@@ -28,6 +31,32 @@ static void LED2_Task(void* parameter)
 	}
 }
 
+static void Delete_Task(void* parameter)
+{
+	while(1)
+	{
+		if(KEY == 0)
+		{
+			vTaskDelay(100);
+			if(KEY == 0)
+			{
+				state = eTaskGetState(LED1_Task_Handle);
+				if(state != eSuspended)
+				{
+					vTaskSuspend(LED1_Task_Handle);
+					printf("LED1_Task任务挂起成功！");
+				}
+				else if(state == eSuspended)
+				{
+					vTaskResume(LED1_Task_Handle);
+					printf("LED1_Task任务恢复成功！");
+				}
+			}
+		}
+		
+	}
+}
+
 static void AppTaskCreate(void)
 {
 	BaseType_t xReturn = pdPASS;
@@ -38,7 +67,7 @@ static void AppTaskCreate(void)
 						  (const char*   )"LED1_Task",
 						  (uint16_t      )512,
 						  (void*		 )NULL,
-						  (UBaseType_t   )2,
+						  (UBaseType_t   )3,
 						  (TaskHandle_t* )&LED1_Task_Handle);
 										
 	if(xReturn == pdPASS) printf("LED1_Task 任务创建成功!\r\n");
@@ -53,6 +82,16 @@ static void AppTaskCreate(void)
 										
 	if(xReturn == pdPASS) printf("LED2_Task 任务创建成功!\r\n");
 	else printf("LED2_Task 任务创建失败!\r\n");
+						  
+	xReturn = xTaskCreate((TaskFunction_t)Delete_Task,
+						  (const char*   )"Delete_Task",
+						  (uint16_t      )512,
+						  (void*		 )NULL,
+						  (UBaseType_t   )1,
+						  (TaskHandle_t* )&Delete_Task_Handle);
+										
+	if(xReturn == pdPASS) printf("Delete_Task 任务创建成功!\r\n");
+	else printf("Delete_Task 任务创建失败!\r\n");
 	
 	vTaskDelete(AppTaskCreate_Handle);
 						  
@@ -86,8 +125,9 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
 int main(void)
 {
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
-	uart_init(115200);
+	uart1_init(115200);
 	LED_Init();
+	KEY_Init();
 	
 	BaseType_t xReturn = pdPASS;
 	
@@ -95,7 +135,7 @@ int main(void)
 						  (const char*   )"AppTaskCreate",
 						  (uint16_t      )512,
 						  (void*		 )NULL,
-						  (UBaseType_t   )1,
+						  (UBaseType_t   )0,
 						  (TaskHandle_t* )&AppTaskCreate_Handle);
 										
 	if(xReturn == pdPASS) vTaskStartScheduler();
@@ -105,3 +145,12 @@ int main(void)
   
 }
 
+void USART1_IRQHandler(void)                	//串口1中断服务程序
+{
+	u8 Res;
+	if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)
+	{
+		Res =USART_ReceiveData(USART1);
+		USART_SendData(USART1, Res);
+    } 
+} 
