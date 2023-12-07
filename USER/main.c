@@ -11,8 +11,6 @@
 eTaskState state;
 
 static TaskHandle_t AppTaskCreate_Handle;
-static TaskHandle_t LED1_Task_Handle;
-static TaskHandle_t LED2_Task_Handle;
 static TaskHandle_t Key_Task_Handle;
 static TaskHandle_t Uart1_Task_Handle;
 
@@ -20,74 +18,76 @@ static TimerHandle_t xTimer_Key;
 
 static SemaphoreHandle_t Semaphore_Uart1 = NULL;
 
-static void LED1_Task(void* parameter)
-{
-	while(1)
-	{
-		LED0 = ~LED0;
-		vTaskDelay(500);
-	}
-}
-
-static void LED2_Task(void* parameter)
-{
-	while(1)
-	{
-		LED1 = ~LED1;
-		vTaskDelay(500);
-	}
-}
-
 static void Uart1_Task(void* parameter)
 {
 	while(1)
 	{
 		if(pdTRUE == xSemaphoreTake(Semaphore_Uart1,portMAX_DELAY))
 		{
-			LED0 = ~LED0;
+			printf("这里是串口中断!\r\n");
 		}
 	}
 }
 
-BaseType_t xTimer_Key_Start_Flag;
+uint8_t xTimer_Key_State = 0, xTimer_Enter_Flag = 0;
+uint8_t button_value = 0, k1_4 = 0, k5_8 = 0;
 
 static void Key_Task(void* parameter)
 {
 	while(1)
 	{
-		if(KEY == 0 && xTimer_Key_Start_Flag != pdTRUE)
+		if(xTimer_Enter_Flag == 0)
 		{
-			if(xTimerReset(xTimer_Key, 0) == pdPASS) 
+			if((xTimer_Key_State == 0 && read_key5_8_Bits() != 0) || (xTimer_Key_State == 1 && read_key1_4_Bits() != 0))
 			{
-				printf("xTimer_Key 定时器任务开启成功!\r\n");
-				xTimer_Key_Start_Flag = pdTRUE;
+				xTimerReset(xTimer_Key, 0); 
+				xTimer_Enter_Flag = 1; 
+				printf("这里是进入软件定时器服务函数之前\r\n");
 			}
-			else printf("xTimer_Key 定时器任务开启失败!\r\n");
+			else if(xTimer_Key_State == 2 && read_key5_8_Bits() == 0)
+			{
+				xTimer_Key_State = 0;
+				printf("%d\r\n", button_value); 
+			}
 		}
-		
+		vTaskDelay(2);
 	}
 }
 
 void vTimer_Key_Callback(TimerHandle_t xTimer)
 {
-	printf("Timer！\r\n");
-	
-	if(KEY == 0 && pdTRUE == xSemaphoreTake(Semaphore_Uart1,portMAX_DELAY))
+	switch(xTimer_Key_State)
 	{
-		state = eTaskGetState(LED1_Task_Handle);
-		if(state != eSuspended)
-		{
-			vTaskSuspend(LED1_Task_Handle);
-			printf("LED1_Task任务挂起成功！");
-		}
-		else if(state == eSuspended)
-		{
-			vTaskResume(LED1_Task_Handle);
-			printf("LED1_Task任务恢复成功！");
-		}
+		case 0:
+			printf("这里是软件定时器服务函数1\r\n");
+			k5_8 = read_key5_8_Bits();
+			if(k5_8 != 0) 
+			{
+				KEY1_4_GPIO_Input_Config();
+				KEY5_8_GPIO_Output_Config();
+				set_key5_8_Bits();
+				xTimer_Key_State = 1;
+			}
+			else xTimer_Key_State = 0;
+			break;
+		case 1:
+			printf("这里是软件定时器服务函数2\r\n");
+			k1_4 = read_key1_4_Bits();
+			if(k1_4 != 0)
+			{ 
+				button_value = 0;
+				button_value |= k5_8; 
+				button_value |= k1_4; 
+				xTimer_Key_State = 2;
+			}
+			else xTimer_Key_State = 0;
+			KEY1_4_GPIO_Output_Config();
+			KEY5_8_GPIO_Input_Config();
+			set_key1_4_Bits();
+			break;
+		default: break;
 	}
-	xTimer_Key_Start_Flag = pdFALSE;
-	
+	xTimer_Enter_Flag = 0;
 }
 
 static void AppTaskCreate(void)
@@ -97,32 +97,12 @@ static void AppTaskCreate(void)
 	Semaphore_Uart1 = xSemaphoreCreateBinary();
 	
 	taskENTER_CRITICAL();	//进入临界区
-	/*创建LED_Task任务*/
-	xReturn = xTaskCreate((TaskFunction_t)LED1_Task,
-						  (const char*   )"LED1_Task",
-						  (uint16_t      )512,
-						  (void*		 )NULL,
-						  (UBaseType_t   )9,
-						  (TaskHandle_t* )&LED1_Task_Handle);
-										
-	if(xReturn == pdPASS) printf("LED1_Task 任务创建成功!\r\n");
-	else printf("LED1_Task 任务创建失败!\r\n");
-						  
-	xReturn = xTaskCreate((TaskFunction_t)LED2_Task,
-						  (const char*   )"LED2_Task",
-						  (uint16_t      )512,
-						  (void*		 )NULL,
-						  (UBaseType_t   )8,
-						  (TaskHandle_t* )&LED2_Task_Handle);
-										
-	if(xReturn == pdPASS) printf("LED2_Task 任务创建成功!\r\n");
-	else printf("LED2_Task 任务创建失败!\r\n");
 						  
 	xReturn = xTaskCreate((TaskFunction_t)Key_Task,
 						  (const char*   )"Key_Task",
 						  (uint16_t      )512,
 						  (void*		 )NULL,
-						  (UBaseType_t   )6,
+						  (UBaseType_t   )7,
 						  (TaskHandle_t* )&Key_Task_Handle);
 										
 	if(xReturn == pdPASS) printf("Delete_Task 任务创建成功!\r\n");
@@ -132,7 +112,7 @@ static void AppTaskCreate(void)
 						  (const char*   )"Uart1_Task",
 						  (uint16_t      )512,
 						  (void*		 )NULL,
-						  (UBaseType_t   )7,
+						  (UBaseType_t   )6,
 						  (TaskHandle_t* )&Uart1_Task_Handle);
 										
 	if(xReturn == pdPASS) printf("Uart1_Task 任务创建成功!\r\n");
@@ -140,7 +120,7 @@ static void AppTaskCreate(void)
 	
 						  
 	xTimer_Key = xTimerCreate((const char*		)"Timer_Key",
-							   (TickType_t		)20,
+							   (TickType_t		)10,
 							   (BaseType_t		)pdFALSE,
 							   (void * 			)0,
 							   (TimerCallbackFunction_t)vTimer_Key_Callback);
@@ -183,6 +163,9 @@ int main(void)
 	uart1_init(115200);
 	LED_Init();
 	KEY_Init();
+	KEY1_4_GPIO_Output_Config();
+	KEY5_8_GPIO_Input_Config();
+	set_key1_4_Bits();
 	
 	BaseType_t xReturn = pdPASS;
 	
@@ -205,12 +188,10 @@ void USART1_IRQHandler(void)                	//串口1中断服务程序
 	u8 Res;
 	if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)
 	{
-//		Res = USART_ReceiveData(USART1);
-//		USART_SendData(USART1, Res);
 		if(Semaphore_Uart1 != NULL)
 		{
 			Res = USART_ReceiveData(USART1);
-			USART_SendData(USART1, Res);
+			//USART_SendData(USART1, Res);
 			xSemaphoreGiveFromISR(Semaphore_Uart1, NULL);
 		}
     } 
